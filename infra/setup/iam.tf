@@ -1,0 +1,61 @@
+################################################################
+#Create IAM user and policies for continuous deploy(CD) account#
+################################################################
+
+resource "aws_iam_user" "cd" {
+  name = "recipe-app-cpi-cd"
+}
+
+resource "aws_iam_access_key" "cd" {
+  user = aws_iam_user.cd.name
+}
+
+#########################################################
+# Policy for Teraform backend to S3 and DynamoDB access #
+#########################################################
+
+# allow poeration: listBucket on this specific bucket. Meaning our CD user can access 
+# our s3 bucket which contain terraform state in order to create state, view state
+# remember, data, defines IAM policy
+data "aws_iam_policy_document" "tf_backend" {
+  statement {
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = ["arn:aws:s3:::${var.tf_state_bucket}"]
+  }
+
+  # allow to crete objects within s3 bucket
+  statement {
+    effect  = "Allow"
+    actions = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = [
+      "arn:aws:s3:::${var.tf_state_bucket}/tf-state-deploy/*",    #key in s3 bucket, directory
+      "arn:aws:s3:::${var.tf_state_bucket}/tf-state-deploy-env/*" #work space, dev, staging, prd
+    ]
+  }
+
+  # define action, allow iam user to get, put, delete statelocking file in dynamo DB
+  statement {
+    effect = "Allow"
+    actions = [
+      "dynamodb:DescribeTable",
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:DeleteItem"
+    ]
+    resources = ["arn:aws:dynamodb:*:*:table/${var.tf_state_lock_table}"]
+  }
+}
+
+# here using resource to create IAM policy
+resource "aws_iam_policy" "tf_backend" {
+  name        = "${aws_iam_user.cd.name}-tf-s3-dynamodb"
+  description = "Allow user to use s3 and dynamoDB for TF backend reources"
+  policy      = data.aws_iam_policy_document.tf_backend.json #policy has to be json
+}
+
+# now need to attach policy to IAM user
+resource "aws_iam_user_policy_attachment" "tf_backend" {
+  user       = aws_iam_user.cd.name
+  policy_arn = aws_iam_policy.tf_backend.arn
+}
