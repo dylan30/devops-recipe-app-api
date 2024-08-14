@@ -74,3 +74,5 @@ jobs:
           docker compose run --rm terraform -chdir=setup/ fmt -check
           docker compose run --rm terraform -chdir=deploy/ validate
           docker compose run --rm terraform -chdir=deploy/ fmt -check
+
+          
